@@ -269,3 +269,28 @@ int(body('Parse_JSON_-_Frozen_Job_Data')?['TotalFrozenJobs'])
     }
   ]
 },
+
+
+# v2 adaptive card body 
+
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.4",
+
+  "body": [
+
+    HEADER,
+
+    FACTS,
+
+    FROZEN_JOBS_HEADING,
+
+    TABLE_HEADER,
+
+    DYNAMIC_ROWS,
+
+    WARNING
+
+  ]
+}
