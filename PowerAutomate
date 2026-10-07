@@ -311,15 +311,23 @@ int(body('Parse_JSON_-_Frozen_Job_Data')?['TotalFrozenJobs'])
     },
     {
       "type": "TextBlock",
-      "text": "Frozen Job Alert",
-      "size": "Medium",
+      "text": "FROZEN JOB ALERT",
       "weight": "Bolder",
+      "size": "Medium",
       "spacing": "None",
       "wrap": true
     },
     {
+      "type": "TextBlock",
+      "text": "SYSTEM DETAILS",
+      "weight": "Bolder",
+      "size": "Small",
+      "spacing": "Large",
+      "wrap": true
+    },
+    {
       "type": "FactSet",
-      "spacing": "Medium",
+      "spacing": "Small",
       "facts": [
         {
           "title": "Environment",
@@ -344,12 +352,13 @@ int(body('Parse_JSON_-_Frozen_Job_Data')?['TotalFrozenJobs'])
       "text": "TOP 5 FROZEN JOBS",
       "weight": "Bolder",
       "size": "Medium",
-      "spacing": "Medium",
+      "spacing": "Large",
       "wrap": true
     },
     {
       "type": "ColumnSet",
       "spacing": "Small",
+      "separator": true,
       "columns": [
         {
           "type": "Column",
@@ -357,8 +366,9 @@ int(body('Parse_JSON_-_Frozen_Job_Data')?['TotalFrozenJobs'])
           "items": [
             {
               "type": "TextBlock",
-              "text": "Frozen Job Name",
+              "text": "FROZEN JOB NAME",
               "weight": "Bolder",
+              "size": "Small",
               "wrap": true
             }
           ]
@@ -369,8 +379,9 @@ int(body('Parse_JSON_-_Frozen_Job_Data')?['TotalFrozenJobs'])
           "items": [
             {
               "type": "TextBlock",
-              "text": "Count",
+              "text": "COUNT",
               "weight": "Bolder",
+              "size": "Small",
               "horizontalAlignment": "Right"
             }
           ]
@@ -521,7 +532,7 @@ int(body('Parse_JSON_-_Frozen_Job_Data')?['TotalFrozenJobs'])
       "type": "TextBlock",
       "text": "⚠️ INVESTIGATION REQUIRED",
       "weight": "Bolder",
-      "spacing": "Medium",
+      "spacing": "Large",
       "wrap": true
     },
     {
