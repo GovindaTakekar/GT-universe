@@ -903,3 +903,114 @@ catch {
         Write-Host $_.ErrorDetails.Message
     }
 }
+
+
+
+### SQL connetion details
+
+# ==============================
+# SQL SERVER CONFIGURATION
+# ==============================
+
+$SqlServer = "YOUR_SQL_SERVER"
+$Database  = "YOUR_DATABASE"
+
+# ==============================
+# SQL QUERIES
+# ==============================
+
+# Total number of frozen jobs
+$TotalFrozenQuery = @"
+SELECT COUNT(*) AS TotalFrozenJobs
+FROM JobQueue
+WHERE ReadyToExe = 'FROZEN';
+"@
+
+# Top 5 frozen JobChains
+$Top5FrozenQuery = @"
+SELECT TOP 5
+    JobChainName,
+    COUNT(JobChainName) AS FrozenCount
+FROM JobQueue
+WHERE ReadyToExe = 'FROZEN'
+GROUP BY JobChainName
+ORDER BY FrozenCount DESC;
+"@
+
+# ==============================
+# SQL CONNECTION
+# ==============================
+
+$ConnectionString = "Server=$SqlServer;Database=$Database;Integrated Security=True;"
+
+$Connection = New-Object System.Data.SqlClient.SqlConnection
+$Connection.ConnectionString = $ConnectionString
+
+try {
+
+    Write-Host "Connecting to SQL Server..."
+
+    $Connection.Open()
+
+    Write-Host "SQL connection successful."
+
+    # ==============================
+    # GET TOTAL FROZEN JOBS
+    # ==============================
+
+    $Command = $Connection.CreateCommand()
+    $Command.CommandText = $TotalFrozenQuery
+
+    $TotalFrozenJobs = [int]$Command.ExecuteScalar()
+
+    Write-Host ""
+    Write-Host "Total Frozen Jobs: $TotalFrozenJobs"
+
+
+    # ==============================
+    # GET TOP 5 FROZEN JOB CHAINS
+    # ==============================
+
+    $Command.CommandText = $Top5FrozenQuery
+
+    $Reader = $Command.ExecuteReader()
+
+    $Top5Jobs = @()
+
+    while ($Reader.Read()) {
+
+        $Job = [PSCustomObject]@{
+            JobChainName = $Reader["JobChainName"].ToString()
+            FrozenCount  = [int]$Reader["FrozenCount"]
+        }
+
+        $Top5Jobs += $Job
+    }
+
+    $Reader.Close()
+
+    # ==============================
+    # DISPLAY RESULTS
+    # ==============================
+
+    Write-Host ""
+    Write-Host "Top 5 Frozen Job Chains:"
+    Write-Host "----------------------------------------"
+
+    $Top5Jobs | Format-Table -AutoSize
+
+}
+catch {
+
+    Write-Host ""
+    Write-Host "ERROR:"
+    Write-Host $_.Exception.Message
+}
+finally {
+
+    if ($Connection.State -eq "Open") {
+        $Connection.Close()
+        Write-Host ""
+        Write-Host "SQL connection closed."
+    }
+}
