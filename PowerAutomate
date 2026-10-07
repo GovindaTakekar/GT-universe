@@ -671,3 +671,252 @@ catch {
         Write-Host $_.ErrorDetails.Message
     }
 }
+
+
+##### card structure for webhook
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.2",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "🚨 ONE IDENTITY MANAGER",
+      "weight": "Bolder",
+      "size": "Large",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "FROZEN JOB ALERT",
+      "weight": "Bolder",
+      "size": "Medium",
+      "spacing": "None",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "SYSTEM DETAILS",
+      "weight": "Bolder",
+      "size": "Small",
+      "spacing": "Large",
+      "wrap": true
+    },
+    {
+      "type": "FactSet",
+      "spacing": "Small",
+      "facts": [
+        {
+          "title": "Environment",
+          "value": "DEV"
+        },
+        {
+          "title": "Job Server",
+          "value": "J1"
+        },
+        {
+          "title": "Check Time",
+          "value": "07-Oct-2026 22:30"
+        },
+        {
+          "title": "Total Frozen Jobs",
+          "value": "8"
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "TOP 5 FROZEN JOBS",
+      "weight": "Bolder",
+      "size": "Medium",
+      "spacing": "Large",
+      "wrap": true
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "separator": true,
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "FROZEN JOB NAME",
+              "weight": "Bolder",
+              "size": "Small",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "COUNT",
+              "weight": "Bolder",
+              "size": "Small",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "ADSync",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "5",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Account Creation",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "2",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Employee Sync",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "1",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Job Server Sync",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "0",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Data Import",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "0",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "⚠️ INVESTIGATION REQUIRED",
+      "weight": "Bolder",
+      "spacing": "Large",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "Please investigate the frozen jobs in One Identity Manager.",
+      "spacing": "Small",
+      "wrap": true
+    }
+  ]
+}
