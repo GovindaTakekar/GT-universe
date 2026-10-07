@@ -204,3 +204,36 @@
 
 # condition 
 int(body('Parse_JSON_-_Frozen_Job_Data')?['TotalFrozenJobs'])
+
+
+
+# apply to each 
+
+{
+  "type": "ColumnSet",
+  "spacing": "Small",
+  "columns": [
+    {
+      "type": "Column",
+      "width": "stretch",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "@{items('Apply_to_each')?['JobName']}",
+          "wrap": true
+        }
+      ]
+    },
+    {
+      "type": "Column",
+      "width": "auto",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "@{string(items('Apply_to_each')?['FrozenCount'])}",
+          "horizontalAlignment": "Right"
+        }
+      ]
+    }
+  ]
+}
