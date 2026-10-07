@@ -576,3 +576,46 @@ int(body('Parse_JSON_-_Frozen_Job_Data')?['TotalFrozenJobs'])
     }
   ]
 }
+
+
+##### webhook powerhsell script 
+
+$WebhookUrl = "YOUR_TEAMS_WEBHOOK_URL"
+
+$payload = @{
+    type = "message"
+    attachments = @(
+        @{
+            contentType = "application/vnd.microsoft.card.adaptive"
+            contentUrl  = $null
+            content = @{
+                '$schema' = "http://adaptivecards.io/schemas/adaptive-card.json"
+                type      = "AdaptiveCard"
+                version   = "1.4"
+
+                body = @(
+                    @{
+                        type   = "TextBlock"
+                        text   = "🚨 One Identity Manager Test"
+                        weight = "Bolder"
+                        size   = "Large"
+                        wrap   = $true
+                    },
+                    @{
+                        type   = "TextBlock"
+                        text   = "Webhook connection is working!"
+                        wrap   = $true
+                    }
+                )
+            }
+        }
+    )
+}
+
+$json = $payload | ConvertTo-Json -Depth 10
+
+Invoke-RestMethod `
+    -Uri $WebhookUrl `
+    -Method POST `
+    -ContentType "application/json" `
+    -Body $json
