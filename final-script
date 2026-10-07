@@ -1,0 +1,480 @@
+# ============================================================
+# ONE IDENTITY MANAGER - FROZEN JOB MONITORING
+# SQL SERVER -> POWERSHELL -> TEAMS WEBHOOK
+# ============================================================
+
+
+# ============================================================
+# 1. CONFIGURATION
+# ============================================================
+
+$SqlServer = "YOUR_SQL_SERVER"
+$Database  = "YOUR_DATABASE"
+
+$Environment = "DEV"
+$JobServer   = "J1"
+
+$WebhookUrl = "YOUR_TEAMS_WEBHOOK_URL"
+
+
+# ============================================================
+# 2. SQL QUERIES
+# ============================================================
+
+# Total number of frozen jobs
+$TotalFrozenQuery = @"
+SELECT COUNT(*) AS TotalFrozenJobs
+FROM JobQueue
+WHERE ReadyToExe = 'FROZEN';
+"@
+
+
+# Top 5 frozen JobChains
+$Top5FrozenQuery = @"
+SELECT TOP 5
+    JobChainName,
+    COUNT(JobChainName) AS FrozenCount
+FROM JobQueue
+WHERE ReadyToExe = 'FROZEN'
+GROUP BY JobChainName
+ORDER BY FrozenCount DESC;
+"@
+
+
+# ============================================================
+# 3. SQL CONNECTION
+# ============================================================
+
+$ConnectionString = "Server=$SqlServer;Database=$Database;Integrated Security=True;"
+
+$Connection = New-Object System.Data.SqlClient.SqlConnection
+$Connection.ConnectionString = $ConnectionString
+
+
+try {
+
+    # ========================================================
+    # CONNECT TO SQL
+    # ========================================================
+
+    Write-Host "Connecting to SQL Server..."
+
+    $Connection.Open()
+
+    Write-Host "SQL connection successful."
+
+
+    # ========================================================
+    # 4. GET TOTAL FROZEN JOBS
+    # ========================================================
+
+    $Command = $Connection.CreateCommand()
+    $Command.CommandText = $TotalFrozenQuery
+
+    $TotalFrozenJobs = [int]$Command.ExecuteScalar()
+
+    Write-Host ""
+    Write-Host "Total Frozen Jobs: $TotalFrozenJobs"
+
+
+    # ========================================================
+    # 5. GET TOP 5 FROZEN JOB CHAINS
+    # ========================================================
+
+    $Command.CommandText = $Top5FrozenQuery
+
+    $Reader = $Command.ExecuteReader()
+
+    $Top5Jobs = @()
+
+    while ($Reader.Read()) {
+
+        $Job = [PSCustomObject]@{
+            JobChainName = $Reader["JobChainName"].ToString()
+            FrozenCount  = [int]$Reader["FrozenCount"]
+        }
+
+        $Top5Jobs += $Job
+    }
+
+    $Reader.Close()
+
+
+    # ========================================================
+    # DISPLAY SQL RESULTS
+    # ========================================================
+
+    Write-Host ""
+    Write-Host "Top 5 Frozen Job Chains:"
+    Write-Host "----------------------------------------"
+
+    $Top5Jobs | Format-Table -AutoSize
+
+
+    # ========================================================
+    # 6. CHECK TIME
+    # ========================================================
+
+    $CheckTime = Get-Date -Format "dd-MMM-yyyy HH:mm"
+
+
+    # ========================================================
+    # 7. PREPARE VALUES FOR CARD
+    # ========================================================
+
+    # We are expecting 5 rows because SQL uses TOP 5.
+    # These values will replace the hard-coded card values.
+
+    $Job1Name  = $Top5Jobs[0].JobChainName
+    $Job1Count = $Top5Jobs[0].FrozenCount
+
+    $Job2Name  = $Top5Jobs[1].JobChainName
+    $Job2Count = $Top5Jobs[1].FrozenCount
+
+    $Job3Name  = $Top5Jobs[2].JobChainName
+    $Job3Count = $Top5Jobs[2].FrozenCount
+
+    $Job4Name  = $Top5Jobs[3].JobChainName
+    $Job4Count = $Top5Jobs[3].FrozenCount
+
+    $Job5Name  = $Top5Jobs[4].JobChainName
+    $Job5Count = $Top5Jobs[4].FrozenCount
+
+
+    # ========================================================
+    # 8. BUILD ADAPTIVE CARD
+    # ========================================================
+
+    $cardJson = @"
+{
+  "`$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.2",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "ONE IDENTITY MANAGER",
+      "weight": "Bolder",
+      "size": "Large",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "FROZEN JOB ALERT",
+      "weight": "Bolder",
+      "size": "Medium",
+      "spacing": "None",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "SYSTEM DETAILS",
+      "weight": "Bolder",
+      "size": "Small",
+      "spacing": "Large",
+      "wrap": true
+    },
+    {
+      "type": "FactSet",
+      "spacing": "Small",
+      "facts": [
+        {
+          "title": "Environment",
+          "value": "$Environment"
+        },
+        {
+          "title": "Job Server",
+          "value": "$JobServer"
+        },
+        {
+          "title": "Check Time",
+          "value": "$CheckTime"
+        },
+        {
+          "title": "Total Frozen Jobs",
+          "value": "$TotalFrozenJobs"
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "TOP 5 FROZEN JOBS",
+      "weight": "Bolder",
+      "size": "Medium",
+      "spacing": "Large",
+      "wrap": true
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "separator": true,
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "FROZEN JOB NAME",
+              "weight": "Bolder",
+              "size": "Small",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "COUNT",
+              "weight": "Bolder",
+              "size": "Small",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "$Job1Name",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "$Job1Count",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "$Job2Name",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "$Job2Count",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "$Job3Name",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "$Job3Count",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "$Job4Name",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "$Job4Count",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "$Job5Name",
+              "wrap": true
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "$Job5Count",
+              "horizontalAlignment": "Right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "INVESTIGATION REQUIRED",
+      "weight": "Bolder",
+      "spacing": "Large",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "Please investigate the frozen jobs in One Identity Manager.",
+      "spacing": "Small",
+      "wrap": true
+    }
+  ]
+}
+"@
+
+
+    # ========================================================
+    # 9. CONVERT CARD JSON TO OBJECT
+    # ========================================================
+
+    $CardObject = $cardJson | ConvertFrom-Json
+
+
+    # ========================================================
+    # 10. BUILD TEAMS WEBHOOK PAYLOAD
+    # ========================================================
+
+    $payload = @{
+        type = "message"
+
+        attachments = @(
+            @{
+                contentType = "application/vnd.microsoft.card.adaptive"
+                contentUrl  = $null
+                content     = $CardObject
+            }
+        )
+    }
+
+
+    # ========================================================
+    # 11. CONVERT PAYLOAD TO JSON
+    # ========================================================
+
+    $json = $payload | ConvertTo-Json -Depth 20
+
+
+    # ========================================================
+    # 12. SEND TO TEAMS
+    # ========================================================
+
+    Write-Host ""
+    Write-Host "Sending frozen job alert to Teams..."
+
+    Invoke-RestMethod `
+        -Uri $WebhookUrl `
+        -Method POST `
+        -ContentType "application/json" `
+        -Body $json
+
+    Write-Host ""
+    Write-Host "SUCCESS - Frozen job alert sent to Teams."
+
+
+}
+catch {
+
+    # ========================================================
+    # ERROR HANDLING
+    # ========================================================
+
+    Write-Host ""
+    Write-Host "=========================================="
+    Write-Host "ERROR"
+    Write-Host "=========================================="
+
+    Write-Host $_.Exception.Message
+
+    if ($_.ErrorDetails.Message) {
+        Write-Host ""
+        Write-Host "Server Response:"
+        Write-Host $_.ErrorDetails.Message
+    }
+
+}
+finally {
+
+    # ========================================================
+    # CLOSE SQL CONNECTION
+    # ========================================================
+
+    if ($Connection.State -eq "Open") {
+
+        $Connection.Close()
+
+        Write-Host ""
+        Write-Host "SQL connection closed."
+    }
+}
