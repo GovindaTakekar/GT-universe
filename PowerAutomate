@@ -1,0 +1,20 @@
+{
+  "Environment": "DEV",
+  "JobServer": "J1",
+  "CheckTime": "07-Oct-2026 20:45",
+  "TotalFrozenJobs": 8,
+  "Jobs": [
+    {
+      "JobName": "ADSync",
+      "FrozenCount": 5
+    },
+    {
+      "JobName": "Account Creation",
+      "FrozenCount": 2
+    },
+    {
+      "JobName": "Employee Sync",
+      "FrozenCount": 1
+    }
+  ]
+}
