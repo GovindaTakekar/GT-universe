@@ -199,3 +199,8 @@
     }
   ]
 }
+
+
+
+# condition 
+int(body('Parse_JSON_-_Frozen_Job_Data')?['TotalFrozenJobs'])
