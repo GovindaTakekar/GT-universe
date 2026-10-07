@@ -543,3 +543,36 @@ int(body('Parse_JSON_-_Frozen_Job_Data')?['TotalFrozenJobs'])
     }
   ]
 }
+
+
+
+#### payload for http request 
+
+{
+  "Environment": "DEV",
+  "JobServer": "J1",
+  "CheckTime": "2026-10-07 22:30:00",
+  "TotalFrozenJobs": 8,
+  "Top5Jobs": [
+    {
+      "JobName": "ADSync",
+      "FrozenCount": 5
+    },
+    {
+      "JobName": "Account Creation",
+      "FrozenCount": 2
+    },
+    {
+      "JobName": "Employee Sync",
+      "FrozenCount": 1
+    },
+    {
+      "JobName": "Job Server Sync",
+      "FrozenCount": 0
+    },
+    {
+      "JobName": "Data Import",
+      "FrozenCount": 0
+    }
+  ]
+}
