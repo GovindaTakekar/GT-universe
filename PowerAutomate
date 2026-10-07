@@ -619,3 +619,55 @@ Invoke-RestMethod `
     -Method POST `
     -ContentType "application/json" `
     -Body $json
+
+
+### debug script 
+$WebhookUrl = "YOUR_WEBHOOK_URL"
+
+$payload = @{
+    type = "message"
+    attachments = @(
+        @{
+            contentType = "application/vnd.microsoft.card.adaptive"
+            contentUrl  = $null
+            content = @{
+                '$schema' = "http://adaptivecards.io/schemas/adaptive-card.json"
+                type      = "AdaptiveCard"
+                version   = "1.2"
+                body = @(
+                    @{
+                        type = "TextBlock"
+                        text = "One Identity Manager Test"
+                        weight = "Bolder"
+                        size = "Large"
+                    }
+                )
+            }
+        }
+    )
+}
+
+$json = $payload | ConvertTo-Json -Depth 10
+
+Write-Host "Sending:"
+Write-Host $json
+
+try {
+    $response = Invoke-RestMethod `
+        -Uri $WebhookUrl `
+        -Method POST `
+        -ContentType "application/json" `
+        -Body $json
+
+    Write-Host "SUCCESS"
+    Write-Host $response
+}
+catch {
+    Write-Host "FAILED"
+    Write-Host $_.Exception.Message
+
+    if ($_.ErrorDetails.Message) {
+        Write-Host "Server response:"
+        Write-Host $_.ErrorDetails.Message
+    }
+}
