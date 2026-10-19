@@ -126,3 +126,24 @@ FROM dbo.JobQueue
 WHERE Ready2EXE = 'FROZEN'
 GROUP BY JobChainName
 ORDER BY CurrentFrozenJobs DESC;
+
+
+2. Next, let's inspect actual historical error patterns
+We'll start with a small pilot rather than all 100+ job chains. I suggest beginning with SAP_SAPComPhone_Insert/Update, which has 203 currently frozen jobs in your results.
+
+The goal is to see whether different historical error messages for this chain can be grouped into a small number of meaningful patterns.
+
+Run this read-only query:
+SELECT TOP (30)
+    JobChainName,
+    TaskName,
+    ComponentClass,
+    WasError,
+    StartAt,
+    EndedAt,
+    LEFT(ErrorMessages, 500) AS ErrorSample
+FROM dbo.JobHistory
+WHERE JobChainName = 'SAP_SAPComPhone_Insert/Update'
+  AND ErrorMessages IS NOT NULL
+  AND LTRIM(RTRIM(ErrorMessages)) <> ''
+ORDER BY EndedAt DESC;
