@@ -169,3 +169,360 @@ GROUP BY
     WasError,
     LEFT(ErrorMessages, 500)
 ORDER BY Occurrences DESC;
+
+
+
+Step 3 — PowerShell prototype
+Copy this into FrozenJobPatternPrototype.ps1.
+
+# FrozenJobPatternPrototype.ps1
+# Read-only prototype: SQL Server -> error normalization -> pattern grouping -> CSV
+# Does not modify JobQueue, JobHistory, or the existing workflow.
+
+# ---------- CONFIGURATION ----------
+$SqlServer = "YOUR_SQL_SERVER"
+$Database  = "YOUR_DATABASE"
+
+$PilotJobChain = "SAP_SAPComPhone_Insert/Update"
+$SimilarityThreshold = 0.75
+
+$OutputFolder = Join-Path $env:USERPROFILE "FrozenJobPatternPrototype"
+$RunTimestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+
+# Use the approved connection method from your existing script.
+$ConnectionString = @"
+Server=$SqlServer;
+Database=$Database;
+Integrated Security=True;
+Encrypt=True;
+TrustServerCertificate=True;
+Application Name=FrozenJobPatternPrototype;
+"@
+
+# ---------- NORMALIZE ERROR TEXT ----------
+function Normalize-ErrorMessage {
+    param([AllowNull()][string]$Message)
+
+    if ([string]::IsNullOrWhiteSpace($Message)) {
+        return ""
+    }
+
+    $text = $Message
+
+    # Remove leading execution timestamp and server prefix.
+    $text = $text -replace '(?is)^\s*\(\d{4}-\d{2}-\d{2}[^)]*\)\s*Executed on:\s*[^ ]+\s*', ''
+
+    # Replace GUIDs and date/time values.
+    $text = $text -replace '(?i)\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b', ' GUID '
+    $text = $text -replace '\b\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?\b', ' TIMESTAMP '
+
+    # Replace common numeric object identifiers in square brackets.
+    $text = $text -replace '\[\d{5,}\]', '[ID]'
+
+    # Normalize whitespace and case.
+    $text = $text -replace '\s+', ' '
+    $text = $text.Trim().ToLowerInvariant()
+
+    return $text
+}
+
+# ---------- TOKEN SIMILARITY ----------
+function Get-TokenSimilarity {
+    param(
+        [string]$TextA,
+        [string]$TextB
+    )
+
+    $tokensA = @(
+        [regex]::Matches($TextA, '[a-z0-9_]+') |
+        ForEach-Object { $_.Value } |
+        Sort-Object -Unique
+    )
+
+    $tokensB = @(
+        [regex]::Matches($TextB, '[a-z0-9_]+') |
+        ForEach-Object { $_.Value } |
+        Sort-Object -Unique
+    )
+
+    if ($tokensA.Count -eq 0 -and $tokensB.Count -eq 0) {
+        return 1.0
+    }
+
+    if ($tokensA.Count -eq 0 -or $tokensB.Count -eq 0) {
+        return 0.0
+    }
+
+    $setB = [System.Collections.Generic.HashSet[string]]::new(
+        [string[]]$tokensB
+    )
+
+    $intersection = 0
+    foreach ($token in $tokensA) {
+        if ($setB.Contains($token)) {
+            $intersection++
+        }
+    }
+
+    $union = @($tokensA + $tokensB | Sort-Object -Unique).Count
+
+    return [double]$intersection / [double]$union
+}
+
+# ---------- READ CURRENT FROZEN JOBS ----------
+$connection = $null
+$command = $null
+$reader = $null
+$jobs = [System.Collections.Generic.List[object]]::new()
+
+try {
+    $connection = [System.Data.SqlClient.SqlConnection]::new(
+        $ConnectionString
+    )
+    $connection.Open()
+
+    $command = $connection.CreateCommand()
+    $command.CommandTimeout = 120
+
+    $command.CommandText = @"
+SELECT
+    UID_Job,
+    JobChainName,
+    TaskName,
+    ComponentClass,
+    Ready2EXE,
+    StartAt,
+    XDateUpdated,
+    ErrorMessages
+FROM dbo.JobQueue
+WHERE Ready2EXE = N'FROZEN'
+  AND JobChainName = @JobChainName
+ORDER BY XDateUpdated DESC;
+"@
+
+    $null = $command.Parameters.Add(
+        "@JobChainName",
+        [System.Data.SqlDbType]::NVarChar,
+        256
+    )
+    $command.Parameters["@JobChainName"].Value = $PilotJobChain
+
+    $reader = $command.ExecuteReader()
+
+    while ($reader.Read()) {
+        $errorText = ""
+        if (-not $reader.IsDBNull(
+            $reader.GetOrdinal("ErrorMessages")
+        )) {
+            $errorText = [string]$reader["ErrorMessages"]
+        }
+
+        $jobs.Add([pscustomobject]@{
+            UID_Job       = [string]$reader["UID_Job"]
+            JobChainName  = [string]$reader["JobChainName"]
+            TaskName      = [string]$reader["TaskName"]
+            ComponentClass = [string]$reader["ComponentClass"]
+            Ready2EXE     = [string]$reader["Ready2EXE"]
+            StartAt       = if ($reader.IsDBNull(
+                $reader.GetOrdinal("StartAt")
+            )) { $null } else { $reader["StartAt"] }
+            XDateUpdated  = if ($reader.IsDBNull(
+                $reader.GetOrdinal("XDateUpdated")
+            )) { $null } else { $reader["XDateUpdated"] }
+            ErrorMessages = $errorText
+        })
+    }
+
+    $reader.Close()
+    $reader = $null
+}
+catch {
+    throw "SQL extraction failed. No classification report was generated. Details: $($_.Exception.Message)"
+}
+finally {
+    if ($null -ne $reader) { $reader.Dispose() }
+    if ($null -ne $command) { $command.Dispose() }
+    if ($null -ne $connection) {
+        if ($connection.State -ne 'Closed') {
+            $connection.Close()
+        }
+        $connection.Dispose()
+    }
+}
+
+if ($jobs.Count -eq 0) {
+    throw "No frozen jobs were returned for the pilot chain. Check the exact chain name and SQL scope."
+}
+
+# ---------- PREPARE MESSAGES ----------
+$prepared = @(
+    foreach ($job in $jobs) {
+        $normalized = Normalize-ErrorMessage $job.ErrorMessages
+
+        [pscustomobject]@{
+            Job              = $job
+            NormalizedError  = $normalized
+            PatternID        = $null
+            SimilarityToRep  = $null
+        }
+    }
+)
+
+# ---------- GREEDY PATTERN CLUSTERING ----------
+# Compare each normalized message to existing representatives.
+# Prototype only: representative-based greedy clustering is not
+# a full semantic or transitive clustering algorithm.
+
+$clusters = [System.Collections.Generic.List[object]]::new()
+
+# Sort for repeatable processing; do not expose full error text in console.
+$nonEmpty = @(
+    $prepared |
+    Where-Object { $_.NormalizedError -ne "" } |
+    Sort-Object NormalizedError
+)
+
+foreach ($item in $nonEmpty) {
+    $bestCluster = $null
+    $bestScore = 0.0
+
+    foreach ($cluster in $clusters) {
+        $score = Get-TokenSimilarity `
+            -TextA $item.NormalizedError `
+            -TextB $cluster.RepresentativeNormalized
+
+        if ($score -gt $bestScore) {
+            $bestScore = $score
+            $bestCluster = $cluster
+        }
+    }
+
+    if ($null -ne $bestCluster -and
+        $bestScore -ge $SimilarityThreshold) {
+
+        $item.PatternID = $bestCluster.PatternID
+        $item.SimilarityToRep = [math]::Round($bestScore, 3)
+        $bestCluster.Items.Add($item)
+    }
+    else {
+        $patternID = "CAT-{0:D3}" -f ($clusters.Count + 1)
+
+        $newCluster = [pscustomobject]@{
+            PatternID = $patternID
+            RepresentativeNormalized = $item.NormalizedError
+            RepresentativeOriginal = $item.Job.ErrorMessages
+            Items = [System.Collections.Generic.List[object]]::new()
+        }
+
+        $item.PatternID = $patternID
+        $item.SimilarityToRep = 1.0
+        $newCluster.Items.Add($item)
+        $clusters.Add($newCluster)
+    }
+}
+
+# Keep empty messages separate; don't treat them as one known error.
+$emptyMessages = @($prepared | Where-Object {
+    $_.NormalizedError -eq ""
+})
+
+foreach ($item in $emptyMessages) {
+    $item.PatternID = "UNCLASSIFIED"
+    $item.SimilarityToRep = $null
+}
+
+# ---------- EXPORT JOB-LEVEL AND SUMMARY CSV ----------
+New-Item -ItemType Directory -Path $OutputFolder -Force |
+    Out-Null
+
+$jobReport = foreach ($item in $prepared) {
+    [pscustomobject]@{
+        JobChainName = $item.Job.JobChainName
+        UID_Job = $item.Job.UID_Job
+        TaskName = $item.Job.TaskName
+        ComponentClass = $item.Job.ComponentClass
+        CurrentStatus = $item.Job.Ready2EXE
+        StartAt = $item.Job.StartAt
+        LastUpdated = $item.Job.XDateUpdated
+        PatternID = $item.PatternID
+        SimilarityToRepresentative = $item.SimilarityToRep
+        HasErrorText = ($item.NormalizedError -ne "")
+        RepresentativeError = $null
+    }
+}
+
+foreach ($row in $jobReport) {
+    $cluster = $clusters |
+        Where-Object { $_.PatternID -eq $row.PatternID } |
+        Select-Object -First 1
+
+    if ($null -ne $cluster) {
+        $row.RepresentativeError = $cluster.RepresentativeOriginal
+    }
+}
+
+$summary = foreach ($cluster in $clusters) {
+    [pscustomobject]@{
+        JobChainName = $PilotJobChain
+        PatternID = $cluster.PatternID
+        CurrentFrozenCount = $cluster.Items.Count
+        DistinctTaskCount = @(
+            $cluster.Items |
+            ForEach-Object { $_.Job.TaskName } |
+            Sort-Object -Unique
+        ).Count
+        RepresentativeError = $cluster.RepresentativeOriginal
+        NormalizedPattern = $cluster.RepresentativeNormalized
+        ReviewStatus = "Unreviewed"
+        SimilarityThreshold = $SimilarityThreshold
+    }
+}
+
+$jobCsv = Join-Path $OutputFolder "FrozenJobs_$RunTimestamp.csv"
+$summaryCsv = Join-Path $OutputFolder "PatternSummary_$RunTimestamp.csv"
+
+$jobReport |
+    Export-Csv -Path $jobCsv -NoTypeInformation -Encoding UTF8
+
+$summary |
+    Sort-Object CurrentFrozenCount -Descending |
+    Export-Csv -Path $summaryCsv -NoTypeInformation -Encoding UTF8
+
+Write-Host ""
+Write-Host "Prototype completed successfully."
+Write-Host "Pilot chain: $PilotJobChain"
+Write-Host "Frozen jobs extracted: $($jobs.Count)"
+Write-Host "Pattern groups: $($clusters.Count)"
+Write-Host "Jobs with no error text: $($emptyMessages.Count)"
+Write-Host "Job-level CSV: $jobCsv"
+Write-Host "Pattern summary CSV: $summaryCsv"
+Write-Host ""
+Write-Host "Review the groups before using them in operational reporting."
+
+
+
+Step 4 — Understand the similarity calculation
+The prototype uses token Jaccard similarity. It compares the unique words in two normalized messages:
+\[
+\text{Similarity}=\frac{\text{Shared unique tokens}}{\text{Total unique tokens across both messages}}
+\]
+
+For example, after normalization:
+- John already exists in Active Directory in MUC domain
+- Jake already exists in Active Directory in BOE domain
+The shared tokens are already, exists, in, active, directory, and domain; John/Jake and MUC/BOE differ. The similarity score may exceed the configured threshold, but the result depends on the exact normalized text.
+
+Important limitations of this first version:
+- The 75% threshold is a starting point, not a validated optimum.
+- It compares messages to a group's representative, so clustering can depend on processing order.
+- It does not understand meaning the way an AI model does.
+- It currently assigns pattern IDs for the current run; IDs are not yet persistent across runs.
+- It does not yet correlate historical records or generate root-cause/SOP recommendations.
+- The CSV contains representative error text. Store it only in an approved location and sanitize it before sharing.
+Step 5 — Run it safely
+1. Save the script in a separate development folder.
+2. Set $SqlServer and $Database to the approved connection values from your existing script.
+3. Verify that the SQL account has read access to JobQueue.
+4. Run it from PowerShell under the approved account.
+5. Open the generated PatternSummary_*.csv and inspect the largest groups.
+6. Compare a few groups against their original error messages. Check for both incorrect merges and messages that should have been grouped together.
