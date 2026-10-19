@@ -147,3 +147,25 @@ WHERE JobChainName = 'SAP_SAPComPhone_Insert/Update'
   AND ErrorMessages IS NOT NULL
   AND LTRIM(RTRIM(ErrorMessages)) <> ''
 ORDER BY EndedAt DESC;
+
+
+QUANTIFY THE ERROR MESSAGES 
+
+SELECT TOP (30)
+    JobChainName,
+    TaskName,
+    ComponentClass,
+    WasError,
+    COUNT(*) AS Occurrences,
+    LEFT(ErrorMessages, 500) AS ErrorSample
+FROM dbo.JobHistory
+WHERE JobChainName = 'SAP_SAPComPhone_Insert/Update'
+  AND ErrorMessages IS NOT NULL
+  AND LTRIM(RTRIM(ErrorMessages)) <> ''
+GROUP BY
+    JobChainName,
+    TaskName,
+    ComponentClass,
+    WasError,
+    LEFT(ErrorMessages, 500)
+ORDER BY Occurrences DESC;
