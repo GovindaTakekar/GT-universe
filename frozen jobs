@@ -25,3 +25,65 @@ And:
 SELECT TOP (5) *
 FROM JobHistory
 ORDER BY 1 DESC;
+
+
+Query 1 — Check historical matches
+Run this read-only query in SSMS:
+WITH FrozenJobs AS
+(
+    SELECT UID_Job, JobChainName
+    FROM dbo.JobQueue
+    WHERE Ready2EXE = 'FROZEN'
+),
+HistoryMatch AS
+(
+    SELECT
+        f.UID_Job,
+        COUNT(h.UID_JobHistory) AS HistoryRecords,
+        SUM(CASE WHEN h.ErrorMessages IS NOT NULL
+                  AND LTRIM(RTRIM(h.ErrorMessages)) <> ''
+                 THEN 1 ELSE 0 END) AS HistoryRecordsWithErrors,
+        MAX(h.EndedAt) AS LatestHistoricalEnd
+    FROM FrozenJobs f
+    LEFT JOIN dbo.JobHistory h
+        ON h.UID_Job = f.UID_Job
+    GROUP BY f.UID_Job
+)
+SELECT
+    COUNT(*) AS CurrentFrozenJobs,
+    SUM(CASE WHEN HistoryRecords > 0 THEN 1 ELSE 0 END)
+        AS JobsWithHistoryMatches,
+    SUM(CASE WHEN HistoryRecords = 0 THEN 1 ELSE 0 END)
+        AS JobsWithoutHistoryMatches,
+    SUM(HistoryRecords) AS MatchedHistoryRecords,
+    SUM(HistoryRecordsWithErrors) AS HistoricalRecordsWithErrors
+FROM HistoryMatch;
+
+
+This gives us a quick overview without returning the actual error messages.
+Query 2 — Inspect a few matched records
+SELECT TOP (20)
+    q.UID_Job,
+    q.JobChainName,
+    q.TaskName,
+    q.Ready2EXE,
+    q.StartAt AS CurrentStartAt,
+    h.UID_JobHistory,
+    h.WasError,
+    h.StartAt AS HistoricalStartAt,
+    h.EndedAt AS HistoricalEndedAt,
+    CASE
+        WHEN h.ErrorMessages IS NULL
+          OR LTRIM(RTRIM(h.ErrorMessages)) = ''
+        THEN 'No error text'
+        ELSE 'Error text available'
+    END AS ErrorTextAvailability,
+    LEN(h.ErrorMessages) AS ErrorTextLength
+FROM dbo.JobQueue q
+LEFT JOIN dbo.JobHistory h
+    ON h.UID_Job = q.UID_Job
+WHERE q.Ready2EXE = 'FROZEN'
+ORDER BY q.XDateUpdated DESC;
+
+
+This lets us see whether the same job has historical records and whether those records contain error text, without displaying the error contents.
