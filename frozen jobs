@@ -87,3 +87,42 @@ ORDER BY q.XDateUpdated DESC;
 
 
 This lets us see whether the same job has historical records and whether those records contain error text, without displaying the error contents.
+
+3. Our next task: establish historical error coverage
+Before involving AI, let's run one query to determine how much useful historical evidence exists per job chain.
+SELECT
+    JobChainName,
+    COUNT(*) AS HistoricalRecords,
+    SUM(CASE WHEN WasError = 1 THEN 1 ELSE 0 END)
+        AS RecordsMarkedAsError,
+    SUM(
+        CASE
+            WHEN ErrorMessages IS NOT NULL
+             AND LTRIM(RTRIM(ErrorMessages)) <> ''
+            THEN 1 ELSE 0
+        END
+    ) AS RecordsWithErrorText,
+    MAX(EndedAt) AS LatestHistoricalEnd
+FROM dbo.JobHistory
+GROUP BY JobChainName
+ORDER BY RecordsWithErrorText DESC, RecordsMarkedAsError DESC;
+
+
+This query doesn't display the error messages themselves. It tells us which job chains have the most historical error evidence.
+
+Next, run the corresponding query for the current frozen jobs:
+SELECT
+    JobChainName,
+    COUNT(*) AS CurrentFrozenJobs,
+    SUM(
+        CASE
+            WHEN ErrorMessages IS NOT NULL
+             AND LTRIM(RTRIM(ErrorMessages)) <> ''
+            THEN 1 ELSE 0
+        END
+    ) AS FrozenJobsWithErrorText,
+    COUNT(DISTINCT TaskName) AS DistinctTaskNames
+FROM dbo.JobQueue
+WHERE Ready2EXE = 'FROZEN'
+GROUP BY JobChainName
+ORDER BY CurrentFrozenJobs DESC;
