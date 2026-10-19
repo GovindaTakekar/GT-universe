@@ -1,0 +1,27 @@
+Step 1 — Inspect both tables
+Run this in SSMS. It only reads metadata; it doesn't modify anything.
+SELECT
+    TABLE_NAME,
+    ORDINAL_POSITION,
+    COLUMN_NAME,
+    DATA_TYPE,
+    IS_NULLABLE
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME IN ('JobQueue', 'JobHistory')
+ORDER BY TABLE_NAME, ORDINAL_POSITION;
+
+
+This will show us the available columns, including possible job identifiers, chain names, error messages, and timestamps.
+Step 2 — Check a few sample records
+Once we know the column names, we'll inspect a small number of rows from each table.
+
+For now, you can run:
+SELECT TOP (5) *
+FROM JobQueue
+WHERE ReadyToExe = 'FROZEN';
+
+
+And:
+SELECT TOP (5) *
+FROM JobHistory
+ORDER BY 1 DESC;
