@@ -650,3 +650,29 @@ Write-Host "Workbook: $xlsxPath"
 Write-Host ""
 Write-Host "Use ErrorReference in Pattern Summary to find the matching row in Error Details."
 
+
+
+Step 2. Add this function near the top of the script, immediately after the configuration variables and before the # NORMALIZE ERROR TEXT section.
+
+function Get-ErrorPreview {
+    param(
+        [AllowNull()]
+        [string]$Message,
+
+        [int]$MaxLength = 180
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Message)) {
+        return "[No error text]"
+    }
+
+    # Convert multiline errors into a single readable line.
+    $preview = $Message -replace '\s+', ' '
+    $preview = $preview.Trim()
+
+    if ($preview.Length -gt $MaxLength) {
+        return $preview.Substring(0, $MaxLength) + "..."
+    }
+
+    return $preview
+}
