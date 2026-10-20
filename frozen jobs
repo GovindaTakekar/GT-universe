@@ -461,6 +461,29 @@ foreach ($row in $jobReport) {
     }
 }
 
+
+function Get-ErrorPreview {
+    param(
+        [AllowNull()][string]$Message,
+        [int]$MaxLength = 180
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Message)) {
+        return "[No error text]"
+    }
+
+    # Collapse multiline stack traces into a single readable line.
+    $preview = $Message -replace '\s+', ' '
+    $preview = $preview.Trim()
+
+    if ($preview.Length -gt $MaxLength) {
+        return $preview.Substring(0, $MaxLength) + "..."
+    }
+
+    return $preview
+}
+
+
 $summary = foreach ($cluster in $clusters) {
     [pscustomobject]@{
         JobChainName = $PilotJobChain
@@ -471,7 +494,7 @@ $summary = foreach ($cluster in $clusters) {
             ForEach-Object { $_.Job.TaskName } |
             Sort-Object -Unique
         ).Count
-        RepresentativeError = $cluster.RepresentativeOriginal
+        RepresentativeError = Get-ErrorPreview $cluster.RepresentativeOriginal
         NormalizedPattern = $cluster.RepresentativeNormalized
         ReviewStatus = "Unreviewed"
         SimilarityThreshold = $SimilarityThreshold
