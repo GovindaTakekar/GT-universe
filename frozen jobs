@@ -549,3 +549,104 @@ Step 5 — Run it safely
 4. Run it from PowerShell under the approved account.
 5. Open the generated PatternSummary_*.csv and inspect the largest groups.
 6. Compare a few groups against their original error messages. Check for both incorrect merges and messages that should have been grouped together.
+
+
+
+UPDATE EXPORT SECTION 
+
+
+# ---------- EXPORT EXCEL WORKBOOK WITH TWO SHEETS ----------
+
+Import-Module ImportExcel -ErrorAction Stop
+
+New-Item -ItemType Directory -Path $OutputFolder -Force |
+    Out-Null
+
+# Give each source job a unique reference for its full error.
+$detailRecords = [System.Collections.Generic.List[object]]::new()
+$referenceNumber = 0
+
+foreach ($item in $prepared) {
+    $referenceNumber++
+    $errorReference = "ERR-{0:D5}" -f $referenceNumber
+
+    # Store the reference on the prepared item so the summary can use it.
+    $item | Add-Member -NotePropertyName ErrorReference `
+        -NotePropertyValue $errorReference -Force
+
+    $detailRecords.Add([pscustomobject]@{
+        ErrorReference = $errorReference
+        PatternID      = $item.PatternID
+        JobChainName   = $item.Job.JobChainName
+        UID_Job        = $item.Job.UID_Job
+        TaskName       = $item.Job.TaskName
+        StartAt        = $item.Job.StartAt
+        LastUpdated    = $item.Job.XDateUpdated
+        FullErrorMessage = $item.Job.ErrorMessages
+    })
+}
+
+# Build the readable pattern summary.
+$summaryRecords = foreach ($cluster in $clusters) {
+    $representativeItem = $cluster.Items[0]
+
+    [pscustomobject]@{
+        JobChainName = $PilotJobChain
+        PatternID = $cluster.PatternID
+        CurrentFrozenCount = $cluster.Items.Count
+        DistinctTaskCount = @(
+            $cluster.Items |
+            ForEach-Object { $_.Job.TaskName } |
+            Sort-Object -Unique
+        ).Count
+        RepresentativeError = Get-ErrorPreview `
+            -Message $representativeItem.Job.ErrorMessages
+        ErrorReference = $representativeItem.ErrorReference
+        ReviewStatus = "Unreviewed"
+        SimilarityThreshold = $SimilarityThreshold
+    }
+}
+
+# Also include records with no error text in the detail tab.
+# They have PatternID UNCLASSIFIED and remain visible for review.
+$detailArray = @($detailRecords)
+
+$summaryArray = @(
+    $summaryRecords |
+    Sort-Object CurrentFrozenCount -Descending
+)
+
+$xlsxPath = Join-Path $OutputFolder "FrozenJobPatterns_$RunTimestamp.xlsx"
+
+# Create a fresh workbook with a readable summary.
+$summaryArray |
+    Export-Excel `
+        -Path $xlsxPath `
+        -WorksheetName "Pattern Summary" `
+        -TableName "PatternSummary" `
+        -AutoSize `
+        -FreezeTopRow `
+        -BoldTopRow `
+        -AutoFilter `
+        -ClearSheet
+
+# Add the complete error text on a separate tab.
+$detailArray |
+    Export-Excel `
+        -Path $xlsxPath `
+        -WorksheetName "Error Details" `
+        -TableName "ErrorDetails" `
+        -AutoSize `
+        -FreezeTopRow `
+        -BoldTopRow `
+        -AutoFilter
+
+Write-Host ""
+Write-Host "Excel workbook created successfully."
+Write-Host "Pilot chain: $PilotJobChain"
+Write-Host "Frozen jobs extracted: $($jobs.Count)"
+Write-Host "Pattern groups: $($clusters.Count)"
+Write-Host "Workbook: $xlsxPath"
+Write-Host ""
+Write-Host "Use ErrorReference in Pattern Summary to find the matching row in Error Details."
+
