@@ -1,0 +1,288 @@
+Technical Architecture Assessment: Cross-Tenant Azure Blob Storage Object Replication for ERGO–Munich Re Integration
+
+Act as a Senior Azure Cloud Architect, Enterprise Integration Architect and Cloud Security Specialist.
+
+I want you to help me evaluate a potential alternative to our existing Managed File Transfer (MFT) solution. The objective is to reduce external file-transfer onboarding costs and recurring service charges while maintaining Munich Re's security, compliance and network segregation requirements.
+
+Please analyse the architecture in depth, challenge my assumptions and recommend a technically feasible solution.
+
+1. Business Background
+
+We have two separate organisations:
+
+- ERGO – External organisation.
+- Munich Re – Internal organisation.
+
+Both organisations operate separate Microsoft Entra ID tenants and Azure environments.
+
+Their corporate networks are segregated, and direct network communication is restricted.
+
+Our existing file-transfer solution uses an internal Munich Re service called GMFT (Global Managed File Transfer).
+
+GMFT currently works as follows:
+
+1. ERGO's HR Aggregator generates CSV files.
+2. ERGO uploads the files to a GMFT-provided SFTP endpoint.
+3. GMFT performs sanity checks and malware scanning.
+4. Files are moved into Azure Blob Storage.
+5. Munich Re's IAM environment retrieves the files from Azure Storage using Azure CLI or an approved SFTP mechanism.
+6. Files are subsequently consumed by IAMweb.
+
+Current GMFT pricing:
+
+- One-time onboarding: £5,000.
+- Recurring monthly cost: £500.
+- Approximate first-year cost: £11,000.
+
+We want to investigate whether we can implement an alternative using existing Munich Re Azure infrastructure.
+
+2. Original Proposed Architecture – Cross-Tenant Object Replication
+
+My initial idea is to create two independent Azure Storage Accounts.
+
+ERGO Azure Tenant (Tenant A)
+
+- ERGO owns Storage Account A.
+- ERGO uploads files into a dedicated Blob container called "external-outgoing".
+- Files may be encrypted before uploading.
+- ERGO retains control of its own storage account.
+
+Munich Re Azure Tenant (Tenant B)
+
+- Munich Re owns Storage Account B.
+- It contains a dedicated container called "external-incoming".
+- Munich Re owns the storage account and controls access to the received files.
+
+Transfer mechanism
+
+Investigate Azure Blob Storage Object Replication as the mechanism for automatically transferring files between these two storage accounts across separate Entra ID tenants.
+
+Expected workflow:
+
+1. ERGO uploads CSV files into Storage Account A.
+2. Azure Object Replication asynchronously copies the blobs to Storage Account B.
+3. Munich Re retrieves the replicated files.
+4. Munich Re decrypts the files using its own private encryption key.
+5. Files undergo malware scanning and validation.
+6. Approved files are made available to the internal IAMweb environment.
+
+We want to avoid direct network connectivity between the two corporate networks.
+
+3. Critical Security Policy Discovered in Munich Re
+
+I found the following configuration in Munich Re's internal Cloud Center of Excellence / SharePoint documentation:
+
+Security control:
+
+"Storage Accounts should prevent cross tenant object replication."
+
+Required configuration:
+
+"properties.allowCrossTenantReplication = false"
+
+The policy description states that cross-tenant replication can potentially allow customer data to be replicated into a storage account owned by another customer.
+
+The documented exception requirement is:
+
+"Provide approval from ITSO."
+
+The control type is listed as Audit.
+
+Please investigate:
+
+1. Does this policy actually prevent cross-tenant replication, or does it only audit non-compliant storage accounts?
+2. Can an exception be granted for a dedicated integration storage account?
+3. What approvals would be required from ITSO, Cloud Security and the Cloud Center of Excellence?
+4. Can the exception be restricted to specific source and destination storage accounts?
+5. Can we implement additional security controls to make the exception acceptable?
+6. What happens if the policy is inherited from a management group or enforced through Azure Policy with a Deny effect?
+
+Do not assume that an exception will be approved.
+
+4. Azure Object Replication – Technical Feasibility
+
+Investigate the complete cross-tenant Object Replication process.
+
+Please cover:
+
+- How two storage accounts in separate Entra ID tenants establish a replication policy.
+- Whether a JSON replication policy exchange between the two administrators is sufficient.
+- Required permissions for both administrators.
+- Required Azure Storage Account configurations.
+- Cross-tenant replication settings.
+- Blob versioning.
+- Change Feed.
+- Supported storage account types.
+- Supported blob types.
+- Hierarchical Namespace limitations.
+- Network Security Perimeter restrictions.
+- Storage firewall and private endpoint compatibility.
+- Encryption and customer-managed key compatibility.
+- Replication delays and failure handling.
+- Monitoring and replication status.
+
+Important known technical constraint:
+
+Azure native SFTP requires Hierarchical Namespace, while Azure Object Replication does not support Hierarchical Namespace-enabled accounts.
+
+Explain the impact of this limitation on our external upload strategy.
+
+5. Encryption Architecture
+
+Munich Re should control the encryption keys.
+
+Proposed approach:
+
+1. Munich Re generates a public/private encryption key pair.
+2. Munich Re securely shares its public key with ERGO.
+3. ERGO encrypts CSV files before uploading them.
+4. Azure Object Replication copies the encrypted blobs.
+5. Munich Re retrieves and decrypts the files using its private key.
+
+Evaluate:
+
+- OpenPGP or another suitable file-level encryption approach.
+- Key storage and rotation.
+- Private-key protection.
+- Encryption metadata.
+- Integrity verification.
+- SHA-256 hashes.
+- Malware scanning of encrypted files.
+- Decryption and scanning workflow.
+- Audit requirements.
+
+Do not assume that encryption replaces malware scanning.
+
+6. Alternative Architecture – Munich Re Directly Pulls from ERGO Storage
+
+If Object Replication is blocked by Munich Re security policy, investigate an alternative.
+
+Proposed workflow:
+
+1. ERGO creates its own Azure Blob Storage Account.
+2. ERGO uploads encrypted CSV files into a dedicated container.
+3. Munich Re authenticates to ERGO's storage account.
+4. Munich Re downloads files over HTTPS using Azure CLI or AzCopy.
+5. Files are uploaded into Munich Re's own Azure Storage Account.
+6. Munich Re decrypts and validates the files.
+
+Compare two authentication mechanisms:
+
+- Microsoft Entra application identity with narrowly scoped Blob Data Reader permissions.
+- Restricted, time-limited SAS tokens.
+
+Explain exactly what needs to be permitted by both organisations.
+
+In particular, analyse:
+
+- Outbound TCP 443 requirements.
+- Public endpoint versus private endpoint.
+- Fixed egress IP addresses.
+- Azure Storage firewall rules.
+- DNS resolution.
+- Cross-tenant Entra authentication.
+- Application registration and consent.
+- Storage RBAC.
+- SAS restrictions.
+- Private connectivity requirements.
+- Whether this approach requires more security and networking approvals than Object Replication.
+
+Our objective is to minimise involvement from multiple infrastructure teams.
+
+7. External File Ingestion – Future Requirements
+
+The solution should not be designed only for ERGO.
+
+We potentially want to support:
+
+- ERGO
+- RHUB
+- EKS
+- Future external systems
+
+RHUB has previously used an SFTP-based file-transfer mechanism.
+
+We are not certain whether SFTP is mandatory for the new integrations.
+
+Evaluate how we could provide a reusable external file-ingestion platform.
+
+Consider:
+
+- SFTP-based uploads.
+- HTTPS / Azure Blob API uploads.
+- Native Azure Blob SFTP.
+- A central Munich Re-controlled Azure Storage Account.
+- Separate containers or identities for each external organisation.
+- Strong isolation between external partners.
+- Per-partner permissions and audit trails.
+
+Determine whether a common Munich Re-owned storage account could support multiple external systems without creating unnecessary security risks.
+
+8. Cost Analysis
+
+Compare the proposed Azure solution against GMFT.
+
+Known GMFT cost:
+
+- £5,000 one-time onboarding.
+- £500 per month.
+
+Illustrative workload:
+
+- 100 MB of files per day.
+- 3 GB per month.
+- Seven-day retention.
+- Different European Azure regions.
+- Two storage accounts.
+- Azure Blob Object Replication.
+- File-level encryption.
+- Defender for Storage malware scanning.
+
+Calculate:
+
+- Storage costs in both regions.
+- Replication transaction costs.
+- Cross-region bandwidth.
+- Change Feed costs.
+- Blob versioning overhead.
+- Defender for Storage base-plan costs.
+- Malware scanning costs.
+- Monitoring costs.
+- Any additional infrastructure costs.
+
+Show monthly and annual costs.
+
+Compare against GMFT and clearly distinguish Azure consumption costs from engineering, support and security approval costs.
+
+Use current official Microsoft pricing documentation and the Azure Pricing Calculator. State the assumed regions and currency.
+
+9. Deliverables Expected
+
+Please produce the following:
+
+1. Technical feasibility assessment of cross-tenant Object Replication.
+2. Detailed explanation of how replication works between two separate Azure tenants.
+3. List of mandatory configurations and prerequisites.
+4. Security policy impact assessment.
+5. Required organisational approvals.
+6. Detailed network and firewall requirements.
+7. Alternative architecture if Object Replication is not approved.
+8. Comparison of Object Replication versus direct pull versus SFTP.
+9. Cost-benefit analysis against GMFT.
+10. Recommended architecture for ERGO, RHUB and EKS.
+11. Proof-of-concept implementation roadmap.
+12. A list of precise questions to send to Munich Re's Cloud Center of Excellence and ITSO.
+
+10. Important Instructions
+
+- Use current Microsoft Learn documentation and official Azure references.
+- Where available, use Munich Re's internal SharePoint documentation, cloud governance policies and Azure landing-zone standards.
+- Do not assume that a technically supported Azure feature is automatically permitted by Munich Re security policy.
+- Clearly distinguish technical limitations from organisational restrictions.
+- Do not recommend bypassing existing security policies.
+- Avoid unnecessary Azure services and infrastructure.
+- Prioritise solutions that require minimal network changes and minimal operational overhead.
+- Challenge my proposed architecture where appropriate.
+- If there are multiple options, rank them based on security, implementation complexity, cost and maintainability.
+
+I want to approach this as a genuine enterprise architecture and cost-optimisation initiative, not just a simple file-copy automation project.
